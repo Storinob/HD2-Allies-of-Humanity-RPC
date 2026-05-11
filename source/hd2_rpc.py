@@ -9,6 +9,9 @@ CLIENT_ID = "1500137093844963601"
 PROCESS_NAME = "helldivers2.exe"
 LAUNCH_DELAY = 20
 CHECK_INTERVAL = 5
+PRESENCE_REFRESH_INTERVAL = 30
+RPC_BACKOFF_BASE = 10
+RPC_BACKOFF_MAX = 30
 REG_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
 APP_NAME = "hd2_Allies_of_Humanity_rpc"
 
@@ -33,46 +36,74 @@ def setup_autostart():
 rpc = None
 game_start_time = None
 first_detected = None
+current_game_pid = None
 presence_active = False
+last_presence_update = 0
+next_rpc_attempt = 0
+rpc_failure_count = 0
 
 def _get_game_pid():
-    for p in psutil.process_iter(['name', 'pid']):
-        if p.info['name'] and p.info['name'].lower() == PROCESS_NAME:
-            return p.info['pid']
+    try:
+        for p in psutil.process_iter(['name', 'pid']):
+            if p.info['name'] and p.info['name'].lower() == PROCESS_NAME:
+                return p.info['pid']
+    except Exception:
+        return None
     return None
+
+def _schedule_rpc_retry():
+    global next_rpc_attempt, rpc_failure_count
+    rpc_failure_count += 1
+    delay = min(RPC_BACKOFF_BASE * rpc_failure_count, RPC_BACKOFF_MAX)
+    next_rpc_attempt = time.time() + delay
+
+def _reset_rpc_retry():
+    global next_rpc_attempt, rpc_failure_count
+    next_rpc_attempt = 0
+    rpc_failure_count = 0
 
 def _connect_rpc():
     global rpc
     if rpc is not None:
         return True
+
+    if time.time() < next_rpc_attempt:
+        return False
+
     try:
         rpc = Presence(CLIENT_ID)
         rpc.connect()
+        _reset_rpc_retry()
         return True
     except Exception:
         rpc = None
+        _schedule_rpc_retry()
         return False
 
 def _disconnect_rpc():
-    global rpc, presence_active
+    global rpc, presence_active, last_presence_update
     if rpc:
+        active_rpc = rpc
+        rpc = None
         try:
-            rpc.clear()
-            rpc.close()
+            active_rpc.clear()
         except Exception:
             pass
-        rpc = None
+        try:
+            active_rpc.close()
+        except Exception:
+            pass
     presence_active = False
+    last_presence_update = 0
 
-def _send_initial_update():
-    global rpc, game_start_time, presence_active
+def _send_presence_update(pid):
+    global rpc, game_start_time, presence_active, last_presence_update
     if not rpc:
-        return
+        return False
 
-    pid = _get_game_pid()
     if not pid:
         _disconnect_rpc()
-        return
+        return False
 
     if game_start_time is None:
         try:
@@ -95,34 +126,47 @@ def _send_initial_update():
             ]
         )
         presence_active = True
+        last_presence_update = time.time()
+        return True
     except Exception:
         _disconnect_rpc()
+        _schedule_rpc_retry()
+        return False
 
 def main():
-    global first_detected, game_start_time
+    global first_detected, game_start_time, current_game_pid
     setup_autostart()
 
     while True:
         try:
+            now = time.time()
             pid = _get_game_pid()
             if pid:
-                if first_detected is None:
-                    first_detected = time.time()
+                if current_game_pid != pid:
+                    _disconnect_rpc()
+                    _reset_rpc_retry()
+                    current_game_pid = pid
+                    first_detected = now
+                    game_start_time = None
+                elif first_detected is None:
+                    first_detected = now
 
-                if time.time() - first_detected >= LAUNCH_DELAY:
+                if now - first_detected >= LAUNCH_DELAY:
                     if rpc is None:
                         _connect_rpc()
                     
-                    if rpc and not presence_active:
-                        _send_initial_update()
+                    if rpc and (not presence_active or now - last_presence_update >= PRESENCE_REFRESH_INTERVAL):
+                        _send_presence_update(pid)
                 else:
                     if rpc:
                         _disconnect_rpc()
             else:
-                if first_detected is not None:
+                if first_detected is not None or current_game_pid is not None or rpc is not None:
                     _disconnect_rpc()
+                    _reset_rpc_retry()
                     first_detected = None
                     game_start_time = None
+                    current_game_pid = None
 
             time.sleep(CHECK_INTERVAL)
         except KeyboardInterrupt:
