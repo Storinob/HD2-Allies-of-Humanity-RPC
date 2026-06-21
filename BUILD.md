@@ -9,7 +9,6 @@ To compile the project, Nuitka requires a C++ compiler installed on your system.
 * If you don't have one, Nuitka will automatically prompt you and download a free, pre-configured **MinGW-w64** compiler during the first build execution.
 ```bash
 pip install -r requirements.txt
-pip install nuitka
 ```
 
 ## 2. Build the executable
