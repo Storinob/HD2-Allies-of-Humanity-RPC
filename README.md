@@ -1,9 +1,7 @@
 # Helldivers 2 Allies of Humanity Rich Presence
 
 Source code repository for the **Helldivers 2 Allies of Humanity Rich Presence** utility.
-
 Nexus Mods page:
-
 https://www.nexusmods.com/helldivers2/mods/13476
 
 ## Overview
@@ -53,9 +51,9 @@ No administrator privileges are required.
 
 ## Antivirus / VirusTotal Notice
 
-The release executable is built with **PyInstaller**.
+The release executable is built with **Nuitka**.
 
-PyInstaller one-file Windows executables can sometimes receive false positive detections from antivirus engines or VirusTotal because they bundle a Python runtime and application code into a single `.exe`.
+Unlike traditional bundlers like PyInstaller, Nuitka translates Python code into native C++ source code and then compiles it into a true Windows binary. This approach significantly reduces false positive detections from antivirus engines and provides better transparency for security heuristics.
 
 The source code is provided here for transparency, user review, and Nexus Mods moderation.
 
