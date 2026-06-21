@@ -122,7 +122,7 @@ def _send_presence_update(pid):
             small_text="Helldivers 2",
             buttons=[
                 {"label": "Allies of Humanity pg", "url": "https://www.nexusmods.com/helldivers2/mods/10485"},
-                {"label": "Current Strategy", "url": "https://hd2galaxy.com"}
+                {"label": "Clans Hub", "url": "https://hd2clans.com"}
             ]
         )
         presence_active = True
